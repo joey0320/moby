@@ -1,17 +1,22 @@
 package daemon // import "github.com/docker/docker/daemon"
 
 import (
+	// "bytes"
 	"errors"
 	"fmt"
+	// "io/ioutil"
 	"net"
 	"os"
 	"path"
+	// "path/filepath"
 	"strings"
 	"time"
 
 	containertypes "github.com/docker/docker/api/types/container"
 	networktypes "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/container"
+	// "github.com/docker/docker/daemon/logger"
+	// "github.com/docker/docker/daemon/logger/jsonfilelog"
 	"github.com/docker/docker/daemon/network"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/opts"
@@ -23,6 +28,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
+	// "github.com/moby/moby-fork/daemon/logger"
 	"github.com/sirupsen/logrus"
 )
 
@@ -733,6 +739,11 @@ func (daemon *Daemon) updateNetworkConfig(container *container.Container, n libn
 
 func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName string, endpointConfig *networktypes.EndpointSettings, updateSettings bool) (err error) {
 	start := time.Now()
+
+	logrus.Info("[*] starting connectToNetwork")
+	cur_time := time.Now()
+	logrus.Info("[*] condition checking start %s", cur_time)
+
 	if container.HostConfig.NetworkMode.IsContainer() {
 		return runconfig.ErrConflictSharedNetwork
 	}
@@ -745,6 +756,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 		endpointConfig = &networktypes.EndpointSettings{}
 	}
 
+	cur_time = time.Now()
+	logrus.Info("[*] condition checking end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] findAndAttachNetwork start %s", cur_time)
 	n, config, err := daemon.findAndAttachNetwork(container, idOrName, endpointConfig)
 	if err != nil {
 		return err
@@ -753,6 +768,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 		return nil
 	}
 
+	cur_time = time.Now()
+	logrus.Info("[*] findAndAttachNetwork end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] edit config start %s", cur_time)
 	var operIPAM bool
 	if config != nil {
 		if epConfig, ok := config.EndpointsConfig[n.Name()]; ok {
@@ -772,6 +791,11 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	if err := daemon.updateNetworkConfig(container, n, endpointConfig, updateSettings); err != nil {
 		return err
 	}
+
+	cur_time = time.Now()
+	logrus.Info("[*] edit config end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] get network controller and sandbox start %s", cur_time)
 
 	controller := daemon.netController
 	sb := daemon.getNetworkSandbox(container)
@@ -803,6 +827,11 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 		return err
 	}
 
+	cur_time = time.Now()
+	logrus.Info("[*] get network controller and sandbox end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] build sandbox start %s", cur_time)
+
 	if sb == nil {
 		sbOptions, err := daemon.buildSandboxOptions(container)
 		if err != nil {
@@ -816,6 +845,11 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 		updateSandboxNetworkSettings(container, sb)
 	}
 
+	cur_time = time.Now()
+	logrus.Info("[*] build sandbox end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] endpoint join start %s", cur_time)
+
 	joinOptions, err := buildJoinOptions(container.NetworkSettings, n)
 	if err != nil {
 		return err
@@ -824,6 +858,11 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	if err := ep.Join(sb, joinOptions...); err != nil {
 		return err
 	}
+
+	cur_time = time.Now()
+	logrus.Info("[*] endpoint join end %s", cur_time)
+	logrus.Print("\n")
+	logrus.Info("[*] etc start %s", cur_time)
 
 	if !container.Managed {
 		// add container name/alias to DNS
@@ -839,7 +878,11 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	container.NetworkSettings.Ports = getPortMapInfo(sb)
 
 	daemon.LogNetworkEventWithAttributes(n, "connect", map[string]string{"container": container.ID})
-	networkActions.WithValues("connect").UpdateSince(start)
+	networkActions.WithValues("modified : connectToNetwork").UpdateSince(start)
+
+	cur_time = time.Now()
+	logrus.Info("[*] etc end %s", cur_time)
+
 	return nil
 }
 
