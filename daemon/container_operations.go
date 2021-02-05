@@ -738,12 +738,9 @@ func (daemon *Daemon) updateNetworkConfig(container *container.Container, n libn
 }
 
 func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName string, endpointConfig *networktypes.EndpointSettings, updateSettings bool) (err error) {
-	start := time.Now()
-
 	logrus.Info("[*] starting connectToNetwork")
-	cur_time := time.Now()
-	logrus.Info("[*] condition checking start %s", cur_time)
 
+	start := time.Now()
 	if container.HostConfig.NetworkMode.IsContainer() {
 		return runconfig.ErrConflictSharedNetwork
 	}
@@ -755,11 +752,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	if endpointConfig == nil {
 		endpointConfig = &networktypes.EndpointSettings{}
 	}
+	elapsed := time.Since(start)
+	logrus.Info("[*] condition checking took : %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] condition checking end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] findAndAttachNetwork start %s", cur_time)
+	start = time.Now()
 	n, config, err := daemon.findAndAttachNetwork(container, idOrName, endpointConfig)
 	if err != nil {
 		return err
@@ -767,11 +763,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	if n == nil {
 		return nil
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] findAndAttachNetwork took %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] findAndAttachNetwork end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] edit config start %s", cur_time)
+	start = time.Now()
 	var operIPAM bool
 	if config != nil {
 		if epConfig, ok := config.EndpointsConfig[n.Name()]; ok {
@@ -787,23 +782,35 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 			endpointConfig.NetworkID = epConfig.NetworkID
 		}
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] IPAM and nwID setting took %s\n", elapsed)
 
+	start = time.Now()
 	if err := daemon.updateNetworkConfig(container, n, endpointConfig, updateSettings); err != nil {
 		return err
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] updateNetworkConfig %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] edit config end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] get network controller and sandbox start %s", cur_time)
-
+	start = time.Now()
 	controller := daemon.netController
+	elapsed = time.Since(start)
+	logrus.Info("[*] daemon.netController %s\n", elapsed)
+
+	start = time.Now()
 	sb := daemon.getNetworkSandbox(container)
+	elapsed = time.Since(start)
+	logrus.Info("[*] daemon.getNetworkSandbox %s\n", elapsed)
+
+	start = time.Now()
 	createOptions, err := buildCreateEndpointOptions(container, n, endpointConfig, sb, daemon.configStore.DNS)
 	if err != nil {
 		return err
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] buildCreateEndpointOptions : %s\n", elapsed)
 
+	start = time.Now()
 	endpointName := strings.TrimPrefix(container.Name, "/")
 	ep, err := n.CreateEndpoint(endpointName, createOptions...)
 	if err != nil {
@@ -820,19 +827,21 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 		EndpointSettings: endpointConfig,
 		IPAMOperational:  operIPAM,
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] CreateEndpoint : %s\n", elapsed)
 
 	delete(container.NetworkSettings.Networks, n.ID())
 
+	start = time.Now()
 	if err := daemon.updateEndpointNetworkSettings(container, n, ep); err != nil {
 		return err
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] updateEndpointNetworkSettings : %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] get network controller and sandbox end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] build sandbox start %s", cur_time)
-
+	start = time.Now()
 	if sb == nil {
+		logrus.Info("[*] sb == nil, controller.NewSandbox called")
 		sbOptions, err := daemon.buildSandboxOptions(container)
 		if err != nil {
 			return err
@@ -844,12 +853,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 
 		updateSandboxNetworkSettings(container, sb)
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] NewSandbox : %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] build sandbox end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] endpoint join start %s", cur_time)
-
+	start = time.Now()
 	joinOptions, err := buildJoinOptions(container.NetworkSettings, n)
 	if err != nil {
 		return err
@@ -858,12 +865,10 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	if err := ep.Join(sb, joinOptions...); err != nil {
 		return err
 	}
+	elapsed = time.Since(start)
+	logrus.Info("[*] ep.Join : %s\n", elapsed)
 
-	cur_time = time.Now()
-	logrus.Info("[*] endpoint join end %s", cur_time)
-	logrus.Print("\n")
-	logrus.Info("[*] etc start %s", cur_time)
-
+	start = time.Now()
 	if !container.Managed {
 		// add container name/alias to DNS
 		if err := daemon.ActivateContainerServiceBinding(container.Name); err != nil {
@@ -880,8 +885,8 @@ func (daemon *Daemon) connectToNetwork(container *container.Container, idOrName 
 	daemon.LogNetworkEventWithAttributes(n, "connect", map[string]string{"container": container.ID})
 	networkActions.WithValues("modified : connectToNetwork").UpdateSince(start)
 
-	cur_time = time.Now()
-	logrus.Info("[*] etc end %s", cur_time)
+	elapsed = time.Since(start)
+	logrus.Info("[*] etc : %s\n", elapsed)
 
 	return nil
 }

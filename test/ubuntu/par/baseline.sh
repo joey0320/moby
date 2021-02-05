@@ -5,8 +5,10 @@ main() {
 		docker run --cap-add SYS_ADMIN -d \
 		--net=host --pid=host --uts=host --ipc=host \
 		--memory=100000k --memory-swap=100000k \
-		-w /tmp -v /home/asd:/tmp ubuntu:trusty 
+		-w /tmp -v /home/asd:/tmp ubuntu:trusty \
+		&
 	done
+	wait
 }
 
 time main
